@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>School Display - Fixed</title>
+    <title>School Display - AllOrigins</title>
     <style>
         body { 
             margin: 0; 
@@ -11,16 +11,13 @@
             font-family: Arial, sans-serif; 
             overflow: hidden;
         }
-        /* Full screen containers */
         #slide-container, #bus-container {
             width: 100vw; height: 100vh;
             position: absolute; top: 0; left: 0;
             border: 0;
         }
-        
         iframe { width: 100%; height: 100%; border: 0; }
         
-        /* Bus Screen Styling */
         #bus-container { 
             display: none; 
             background: black; 
@@ -35,31 +32,19 @@
             font-weight: bold;
         }
         .bus-row { 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center;
-            background-color: #1a1a1a;
-            margin-bottom: 20px; 
-            padding: 20px;
-            border-radius: 15px;
-            font-size: 3.5vw; 
+            display: flex; justify-content: space-between; align-items: center;
+            background-color: #1a1a1a; margin-bottom: 20px; padding: 20px;
+            border-radius: 15px; font-size: 3.5vw; 
         }
         .line { 
-            background-color: #d91e18; 
-            color: white;
-            padding: 10px 30px;
-            border-radius: 8px;
-            font-weight: bold;
-            min-width: 80px;
-            text-align: center;
+            background-color: #d91e18; color: white; padding: 10px 30px;
+            border-radius: 8px; font-weight: bold; min-width: 80px; text-align: center;
         }
         .dest { flex-grow: 1; margin-left: 30px; }
         .time { color: #00ff00; font-weight: bold; }
         
-        /* Error box styling (just in case) */
-        #error-box {
-            position: fixed; bottom: 10px; left: 10px;
-            color: gray; font-size: 12px; z-index: 9999;
+        #debug-log {
+            position: fixed; bottom: 5px; left: 5px; color: gray; font-size: 10px; z-index: 9999;
         }
     </style>
 </head>
@@ -74,31 +59,26 @@
         <div id="bus-list">Loading...</div>
     </div>
     
-    <div id="error-box"></div>
+    <div id="debug-log"></div>
 
     <script>
-        // --- 1. SETTINGS (DO NOT DELETE) ---
+        // --- SETTINGS ---
         const SLIDE_URL = "https://docs.google.com/presentation/d/e/2PACX-1vQwjmE1FkRhNx5nQYTXnp6GILgPBUGh0L1qHyrPiBH92eyt_2XiUNhbWCRengOVVzJ5IXHZqP8S1bWI/embed?start=true&loop=true&delayms=10000";
         const SITE_ID = "1606";
         const BUS_FILTER = "Upplands Väsby";
-        const SLIDE_TIME = 30000; // 30 seconds
-        const BUS_TIME = 15000;   // 15 seconds
+        const SLIDE_TIME = 30000;
+        const BUS_TIME = 15000;
 
-        // --- 2. MAIN LOGIC ---
+        // --- LOGIC ---
         const slideFrame = document.getElementById('slide-frame');
         const slideDiv = document.getElementById('slide-container');
         const busDiv = document.getElementById('bus-container');
         const busList = document.getElementById('bus-list');
+        const debugLog = document.getElementById('debug-log');
 
-        // Initialize
-        try {
-            slideFrame.src = SLIDE_URL;
-            
-            // Start the loop
-            setTimeout(showBuses, SLIDE_TIME);
-        } catch (e) {
-            document.getElementById('error-box').innerText = "Setup Error: " + e.message;
-        }
+        // Start
+        slideFrame.src = SLIDE_URL;
+        setTimeout(showBuses, SLIDE_TIME);
 
         function showSlides() {
             busDiv.style.display = 'none';
@@ -115,43 +95,66 @@
 
         async function fetchBusData() {
             busList.innerHTML = "<div style='text-align:center;'>Updating...</div>";
+            const slUrl = `https://transport.integration.sl.se/v1/sites/${SITE_ID}/departures?transport_authority_id=1`;
+            
             try {
-                // Using corsproxy.io
-                const target = `https://transport.integration.sl.se/v1/sites/${SITE_ID}/departures?transport_authority_id=1`;
-                const proxy = "https://corsproxy.io/?" + encodeURIComponent(target);
+                // Try Strategy 1: AllOrigins (Different proxy)
+                debugLog.innerText = "Trying: AllOrigins...";
+                const proxyUrl = "https://api.allorigins.win/get?url=" + encodeURIComponent(slUrl);
                 
-                const response = await fetch(proxy);
-                if (!response.ok) throw new Error("Network Error");
+                let response = await fetch(proxyUrl);
+                if (!response.ok) throw new Error("AllOrigins blocked");
                 
-                const data = await response.json();
-                const buses = data.departures || [];
+                let data = await response.json();
+                // AllOrigins wraps the data in a "contents" string, so we parse it again
+                let realData = JSON.parse(data.contents);
                 
-                let html = "";
-                let count = 0;
-                
-                buses.forEach(b => {
-                    if (b.line.transport_mode === 'BUS' && b.destination.includes(BUS_FILTER)) {
-                        if (count < 4) {
-                            html += `
-                            <div class="bus-row">
-                                <div class="line">${b.line.designation}</div>
-                                <div class="dest">${b.destination}</div>
-                                <div class="time">${b.display}</div>
-                            </div>`;
-                            count++;
-                        }
-                    }
-                });
+                renderBuses(realData);
+                debugLog.innerText = "Success: AllOrigins";
 
-                if (count === 0) html = "<div style='text-align:center; margin-top:50px;'>No buses found.</div>";
-                busList.innerHTML = html;
-
-            } catch (err) {
-                busList.innerHTML = `<div style='text-align:center; color:red;'>
-                    Error loading buses.<br>
-                    <small>${err.message}</small>
-                </div>`;
+            } catch (e1) {
+                console.error("Proxy failed", e1);
+                
+                // Try Strategy 2: Direct Connection (In case SL allows it now)
+                try {
+                    debugLog.innerText = "Proxy failed. Trying Direct...";
+                    let response2 = await fetch(slUrl);
+                    if (!response2.ok) throw new Error("Direct blocked");
+                    let data2 = await response2.json();
+                    renderBuses(data2);
+                    debugLog.innerText = "Success: Direct";
+                    
+                } catch (e2) {
+                    busList.innerHTML = `<div style='text-align:center; color:red; font-size: 2vw;'>
+                        Network Blocked.<br>
+                        <span style="color:white; font-size: 1.5vw;">The school internet is blocking the connection.</span>
+                    </div>`;
+                    debugLog.innerText = "CRITICAL: All methods failed.";
+                }
             }
+        }
+
+        function renderBuses(data) {
+            const buses = data.departures || [];
+            let html = "";
+            let count = 0;
+            
+            buses.forEach(b => {
+                if (b.line.transport_mode === 'BUS' && b.destination.includes(BUS_FILTER)) {
+                    if (count < 4) {
+                        html += `
+                        <div class="bus-row">
+                            <div class="line">${b.line.designation}</div>
+                            <div class="dest">${b.destination}</div>
+                            <div class="time">${b.display}</div>
+                        </div>`;
+                        count++;
+                    }
+                }
+            });
+
+            if (count === 0) html = "<div style='text-align:center; margin-top:50px;'>No buses found.</div>";
+            busList.innerHTML = html;
         }
     </script>
 </body>
