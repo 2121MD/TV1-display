@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>School Display</title>
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background-color: black; font-family: Arial, sans-serif; }
+        
+        /* The container for the Bus Times */
+        #bus-container {
+            display: none; /* Hidden by default */
+            height: 100vh; width: 100vw;
+            color: white;
+            padding: 5vh;
+            box-sizing: border-box;
+        }
+
+        /* The container for Google Slides */
+        #slide-container {
+            display: block; /* Visible by default */
+            height: 100vh; width: 100vw;
+            border: none;
+        }
+        
+        iframe { width: 100%; height: 100%; border: 0; }
+
+        /* Bus Styles */
+        .header { font-size: 5vw; color: #ffdd00; text-align: center; margin-bottom: 5vh; font-weight: bold;}
+        .bus-row { display: flex; justify-content: space-between; align-items: center; background: #222; margin-bottom: 2vh; padding: 2vh; border-radius: 10px; }
+        .bus-line { background: #d91e18; color: white; padding: 1vh 3vw; font-size: 4vw; font-weight: bold; border-radius: 5px; min-width: 8vw; text-align: center; }
+        .bus-dest { font-size: 3.5vw; flex-grow: 1; margin-left: 3vw; }
+        .bus-time { font-size: 4vw; color: #00ff00; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="slide-container">
+        <iframe id="slide-frame" src=""></iframe>
+    </div>
+
+    <div id="bus-container">
+        <div class="header">Bus Times: Marabou</div>
+        <div id="bus-list">Loading buses...</div>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        // 1. "https://docs.google.com/presentation/d/e/2PACX-1vQwjmE1FkRhNx5nQYTXnp6GILgPBUGh0L1qHyrPiBH92eyt_2XiUNhbWCRengOVVzJ5IXHZqP8S1bWI/pubembed?start=false&loop=false&delayms=3000"
+        const SLIDE_URL = "https://docs.google.com/presentation/d/e/YOUR_LONG_ID_HERE/embed?start=true&loop=true&delayms=10000";
+        
+        // 2. Your SL Site ID (Marabou)
+        const SITE_ID = "https://docs.google.com/presentation/d/e/2PACX-1vQwjmE1FkRhNx5nQYTXnp6GILgPBUGh0L1qHyrPiBH92eyt_2XiUNhbWCRengOVVzJ5IXHZqP8S1bWI/pubembed?start=false&loop=false&delayms=3000"; 
+        
+        // 3. Filter (e.g., "Upplands Väsby" or "" for all buses)
+        const BUS_FILTER = "Upplands Väsby";
+
+        // 4. Timing (How long to show each screen in milliseconds)
+        const SLIDE_DURATION = 30000; // 30 seconds for slides
+        const BUS_DURATION = 15000;   // 15 seconds for bus times
+
+        // --- LOGIC ---
+        const slideContainer = document.getElementById('slide-container');
+        const busContainer = document.getElementById('bus-container');
+        const slideFrame = document.getElementById('slide-frame');
+
+        // Set the slide URL immediately
+        slideFrame.src = SLIDE_URL;
+
+        function showSlides() {
+            busContainer.style.display = 'none';
+            slideContainer.style.display = 'block';
+            setTimeout(showBuses, SLIDE_DURATION);
+        }
+
+        function showBuses() {
+            slideContainer.style.display = 'none';
+            busContainer.style.display = 'block';
+            fetchBusTimes(); // Refresh data when we show the screen
+            setTimeout(showSlides, BUS_DURATION);
+        }
+
+        async function fetchBusTimes() {
+            const list = document.getElementById('bus-list');
+            try {
+                // Using a CORS proxy to allow browser requests to SL
+                const proxy = "https://api.allorigins.win/get?url=";
+                const slUrl = encodeURIComponent(`https://transport.integration.sl.se/v1/sites/${SITE_ID}/departures?transport_authority_id=1`);
+                
+                const response = await fetch(proxy + slUrl);
+                const data = await response.json();
+                const realData = JSON.parse(data.contents); // Unwrap proxy data
+                
+                let html = "";
+                const buses = realData.departures || [];
+                let count = 0;
+
+                buses.forEach(bus => {
+                    if (bus.line.transport_mode === 'BUS' && bus.destination.includes(BUS_FILTER)) {
+                        if (count < 4) { // Show max 4 buses
+                            html += `
+                            <div class="bus-row">
+                                <div class="bus-line">${bus.line.designation}</div>
+                                <div class="bus-dest">${bus.destination}</div>
+                                <div class="bus-time">${bus.display}</div>
+                            </div>`;
+                            count++;
+                        }
+                    }
+                });
+
+                if (count === 0) html = "<div style='text-align:center; font-size:3vw;'>No buses found right now.</div>";
+                list.innerHTML = html;
+
+            } catch (e) {
+                list.innerHTML = "Error loading bus data.";
+                console.error(e);
+            }
+        }
+
+        // Start the loop
+        setTimeout(showBuses, SLIDE_DURATION); // Start switching after the first slide round
+
+    </script>
+</body>
+</html>
