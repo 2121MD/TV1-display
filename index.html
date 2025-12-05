@@ -2,139 +2,156 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>School Display - Diagnostic Mode</title>
+    <title>School Display - Fixed</title>
     <style>
         body { 
             margin: 0; 
-            background-color: #002244; /* Dark Blue so you know it loaded */
+            background-color: #000; 
             color: white; 
-            font-family: sans-serif; 
+            font-family: Arial, sans-serif; 
             overflow: hidden;
         }
-        #status-log {
-            position: absolute; top: 10px; left: 10px; 
-            background: rgba(0,0,0,0.8); padding: 10px; 
-            z-index: 9999; max-width: 50%;
-            border: 1px solid white;
-        }
+        /* Full screen containers */
         #slide-container, #bus-container {
             width: 100vw; height: 100vh;
             position: absolute; top: 0; left: 0;
+            border: 0;
         }
+        
         iframe { width: 100%; height: 100%; border: 0; }
         
-        /* Bus Styling */
-        #bus-container { display: none; background: black; padding: 50px; box-sizing: border-box; }
-        .bus-row { display: flex; justify-content: space-between; font-size: 3vw; margin-bottom: 20px; border-bottom: 1px solid #333; padding-bottom: 10px; }
-        .line { color: #ffdd00; font-weight: bold; width: 10vw; }
-        .time { color: #00ff00; }
+        /* Bus Screen Styling */
+        #bus-container { 
+            display: none; 
+            background: black; 
+            padding: 40px; 
+            box-sizing: border-box; 
+        }
+        .header {
+            font-size: 5vw; 
+            color: #ffdd00; 
+            text-align: center; 
+            margin-bottom: 40px; 
+            font-weight: bold;
+        }
+        .bus-row { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            background-color: #1a1a1a;
+            margin-bottom: 20px; 
+            padding: 20px;
+            border-radius: 15px;
+            font-size: 3.5vw; 
+        }
+        .line { 
+            background-color: #d91e18; 
+            color: white;
+            padding: 10px 30px;
+            border-radius: 8px;
+            font-weight: bold;
+            min-width: 80px;
+            text-align: center;
+        }
+        .dest { flex-grow: 1; margin-left: 30px; }
+        .time { color: #00ff00; font-weight: bold; }
+        
+        /* Error box styling (just in case) */
+        #error-box {
+            position: fixed; bottom: 10px; left: 10px;
+            color: gray; font-size: 12px; z-index: 9999;
+        }
     </style>
 </head>
 <body>
-
-    <div id="status-log">System Status: Initializing...</div>
 
     <div id="slide-container">
         <iframe id="slide-frame" src=""></iframe>
     </div>
 
     <div id="bus-container">
-        <h1 style="text-align:center; color:#ffdd00;">Bus Times: Marabou</h1>
+        <div class="header">Bus Times: Marabou</div>
         <div id="bus-list">Loading...</div>
     </div>
+    
+    <div id="error-box"></div>
 
     <script>
-        // --- YOUR SETTINGS ---
-        const SLIDE_ = "";
+        // --- 1. SETTINGS (DO NOT DELETE) ---
+        const SLIDE_URL = "https://docs.google.com/presentation/d/e/2PACX-1vQwjmE1FkRhNx5nQYTXnp6GILgPBUGh0L1qHyrPiBH92eyt_2XiUNhbWCRengOVVzJ5IXHZqP8S1bWI/embed?start=true&loop=true&delayms=10000";
         const SITE_ID = "1606";
         const BUS_FILTER = "Upplands Väsby";
-        const SLIDE_TIME = 30000;
-        const BUS_TIME = 15000;
+        const SLIDE_TIME = 30000; // 30 seconds
+        const BUS_TIME = 15000;   // 15 seconds
 
-        // --- DEBUGGER ---
-        function log(msg) {
-            const logBox = document.getElementById('status-log');
-            logBox.innerHTML += "<br>" + msg;
-            console.log(msg);
-        }
-        
-        window.onerror = function(message, source, lineno, colno, error) {
-            log("❌ ERROR: " + message);
-        };
+        // --- 2. MAIN LOGIC ---
+        const slideFrame = document.getElementById('slide-frame');
+        const slideDiv = document.getElementById('slide-container');
+        const busDiv = document.getElementById('bus-container');
+        const busList = document.getElementById('bus-list');
 
-        // --- MAIN LOGIC ---
+        // Initialize
         try {
-            const slideFrame = document.getElementById('slide-frame');
-            const slideDiv = document.getElementById('slide-container');
-            const busDiv = document.getElementById('bus-container');
-
-            log("✅ Code started.");
-            
-            // Set Slide URL
             slideFrame.src = SLIDE_URL;
-            log("✅ Slides URL set.");
-
-            function showSlides() {
-                log("🔄 Switching to Slides...");
-                busDiv.style.display = 'none';
-                slideDiv.style.display = 'block';
-                setTimeout(showBuses, SLIDE_TIME);
-            }
-
-            function showBuses() {
-                log("🔄 Switching to Buses...");
-                slideDiv.style.display = 'none';
-                busDiv.style.display = 'block';
-                fetchBusData();
-                setTimeout(showSlides, BUS_TIME);
-            }
-
-            async function fetchBusData() {
-                const busList = document.getElementById('bus-list');
-                busList.innerHTML = "Fetching from SL...";
-                
-                try {
-                    const target = `https://transport.integration.sl.se/v1/sites/${SITE_ID}/departures?transport_authority_id=1`;
-                    // Using corsproxy.io
-                    const proxy = "https://corsproxy.io/?" + encodeURIComponent(target);
-                    
-                    const res = await fetch(proxy);
-                    if (!res.ok) throw new Error("Network error: " + res.status);
-                    
-                    const data = await res.json();
-                    const buses = data.departures || [];
-                    
-                    let html = "";
-                    let count = 0;
-                    
-                    buses.forEach(b => {
-                        if (b.line.transport_mode === 'BUS' && b.destination.includes(BUS_FILTER)) {
-                            if (count < 4) {
-                                html += `<div class='bus-row'>
-                                    <span class='line'>${b.line.designation}</span>
-                                    <span class='dest'>${b.destination}</span>
-                                    <span class='time'>${b.display}</span>
-                                </div>`;
-                                count++;
-                            }
-                        }
-                    });
-
-                    if (count === 0) html = "<p>No buses found to " + BUS_FILTER + "</p>";
-                    busList.innerHTML = html;
-                    log("✅ Data loaded successfully.");
-
-                } catch (err) {
-                    log("❌ Fetch Failed: " + err.message);
-                    busList.innerHTML = "Error: " + err.message;
-                }
-            }
-
+            
             // Start the loop
             setTimeout(showBuses, SLIDE_TIME);
-
         } catch (e) {
-            log("❌ CRITICAL SETUP ERROR: " + e.message);
+            document.getElementById('error-box').innerText = "Setup Error: " + e.message;
+        }
+
+        function showSlides() {
+            busDiv.style.display = 'none';
+            slideDiv.style.display = 'block';
+            setTimeout(showBuses, SLIDE_TIME);
+        }
+
+        function showBuses() {
+            slideDiv.style.display = 'none';
+            busDiv.style.display = 'block';
+            fetchBusData();
+            setTimeout(showSlides, BUS_TIME);
+        }
+
+        async function fetchBusData() {
+            busList.innerHTML = "<div style='text-align:center;'>Updating...</div>";
+            try {
+                // Using corsproxy.io
+                const target = `https://transport.integration.sl.se/v1/sites/${SITE_ID}/departures?transport_authority_id=1`;
+                const proxy = "https://corsproxy.io/?" + encodeURIComponent(target);
+                
+                const response = await fetch(proxy);
+                if (!response.ok) throw new Error("Network Error");
+                
+                const data = await response.json();
+                const buses = data.departures || [];
+                
+                let html = "";
+                let count = 0;
+                
+                buses.forEach(b => {
+                    if (b.line.transport_mode === 'BUS' && b.destination.includes(BUS_FILTER)) {
+                        if (count < 4) {
+                            html += `
+                            <div class="bus-row">
+                                <div class="line">${b.line.designation}</div>
+                                <div class="dest">${b.destination}</div>
+                                <div class="time">${b.display}</div>
+                            </div>`;
+                            count++;
+                        }
+                    }
+                });
+
+                if (count === 0) html = "<div style='text-align:center; margin-top:50px;'>No buses found.</div>";
+                busList.innerHTML = html;
+
+            } catch (err) {
+                busList.innerHTML = `<div style='text-align:center; color:red;'>
+                    Error loading buses.<br>
+                    <small>${err.message}</small>
+                </div>`;
+            }
         }
     </script>
 </body>
